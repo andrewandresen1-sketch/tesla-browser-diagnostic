@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Tesla browser diagnostic · Phase 9</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141824; --panel2:#10141e; --line:#2a3042;
+    --text:#e9edf6; --muted:#9aa3b8; --ok:#3ddc97; --no:#ff6b6b;
+    --warn:#ffb020; --info:#69a8ff; --accent:#c9a227;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+  body{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:18px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+  h2{font-size:18px;margin:0 0 10px}
+  p{margin:0 0 10px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 16px}
+  .verdict{font-size:20px;font-weight:700;line-height:1.3;margin:0 0 8px}
+  .verdict small{display:block;font-weight:400;color:var(--muted);font-size:14px;margin-top:8px}
+  .chip{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+  .chip.ok{background:rgba(61,220,151,.15);color:var(--ok)}
+  .chip.no{background:rgba(255,107,107,.15);color:var(--no)}
+  .chip.warn{background:rgba(255,176,32,.16);color:var(--warn)}
+  .chip.info{background:rgba(105,168,255,.15);color:var(--info)}
+  .chip.gate{background:rgba(201,162,39,.18);color:var(--accent)}
+  .callout{border-left:4px solid var(--warn);background:rgba(255,176,32,.08);padding:10px 12px;border-radius:6px;margin:12px 0 0;font-size:14px}
+  .callout.bad{border-left-color:var(--no);background:rgba(255,107,107,.08)}
+  .callout.good{border-left-color:var(--ok);background:rgba(61,220,151,.07)}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-size:15px}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  td.k{color:var(--muted);width:46%}
+  td.v{font-variant-numeric:tabular-nums;word-break:break-word}
+  table.codecs th,table.codecs td{font-size:13px;padding:8px 6px}
+  table.codecs td:first-child{font-weight:600}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}
+  .small{font-size:13px;color:var(--muted)}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+  input,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font:15px/1.4 system-ui,sans-serif;padding:10px}
+  textarea{min-height:160px;font-family:ui-monospace,Consolas,monospace;font-size:12px;resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;grid-gap:12px}
+  button{font:700 16px system-ui,sans-serif;padding:13px 16px;border-radius:10px;border:1px solid var(--line);background:#1e2536;color:var(--text);margin:0 10px 10px 0;min-width:150px}
+  button.primary{background:#243a5e;border-color:#31527f}
+  button:active{transform:translateY(1px)}
+  pre{white-space:pre-wrap;word-break:break-word;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:13px;margin:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;grid-gap:16px}
+  .keygrid{display:grid;grid-template-columns:1fr 1fr;grid-gap:10px}
+  .keyitem{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .keyitem b{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 3px}
+  .keyitem span{font-size:19px;font-weight:700;word-break:break-word}
+  .keyitem span.ok{color:var(--ok)}
+  .keyitem span.no{color:var(--no)}
+  .keyitem span.warn{color:var(--warn)}
+  .footer{color:var(--muted);font-size:12px;line-height:1.5;margin:18px 0 8px}
+  ul{margin:0 0 8px 18px;padding:0}
+  li{margin:0 0 6px}
+  @media (max-width:760px){
+    body{padding:12px}
+    h1{font-size:22px}
+    .row2,.grid2{grid-template-columns:1fr}
+    .keygrid{grid-template-columns:1fr}
+    td.k{width:52%}
+    button{width:100%;margin-right:0}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Tesla browser diagnostic</h1>
+  <p class="sub">Phase 9 capability census · no permissions · no accounts · no external requests</p>
+
+  <noscript>
+    <div class="panel"><strong>JavaScript is disabled.</strong> This page cannot run. Enable JavaScript in the browser and reload.</div>
+  </noscript>
+
+  <div class="panel" id="verdictPanel" aria-live="polite">
+    <div class="verdict" id="verdictLine">Running capability checks…</div>
+    <div class="small" id="verdictSub">This takes a second. Nothing is uploaded.</div>
+    <div id="verdictExtra"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Key values — photograph this</h2>
+    <div class="keygrid" id="keyGrid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Vehicle details (typed by you)</h2>
+    <p class="small">The browser cannot read the Tesla software version. Type it from Controls &gt; Software so the exported result is self-describing. Nothing is stored on a server.</p>
+    <div class="row2">
+      <div>
+        <label for="inModel">Model and year</label>
+        <input id="inModel" value="Model 3 · 2021" autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <label for="inSw">Tesla software version (Controls &gt; Software)</label>
+        <input id="inSw" placeholder="e.g. 2026.44.1" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <label for="inNotes">Notes (optional: MCU label, what you observed)</label>
+    <input id="inNotes" placeholder="e.g. Additional Vehicle Information says Intel Atom" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div class="panel">
+    <h2>Browser and display</h2>
+    <table id="browserTable"><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <h2>Media capabilities</h2>
+    <table id="capsTable"><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <h2>Codec support</h2>
+    <p class="small">Three independent answers: the media element (<span class="mono">canPlayType</span>), Media Source Extensions, and WebCodecs <span class="mono">isConfigSupported</span>. “—” means the API to ask is not present.</p>
+    <table class="codecs" id="codecsTable">
+      <thead><tr><th>Codec</th><th>canPlayType</th><th>MSE</th><th>WebCodecs</th><th>HW pref</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Export the result</h2>
+    <p class="small">Everything below is generated in this tab. The page makes no network requests: the host sends the page, and nothing is sent back.</p>
+    <button class="primary" id="btnCopy" type="button">Copy JSON</button>
+    <button id="btnDownload" type="button">Download JSON</button>
+    <button id="btnSelect" type="button">Select all</button>
+    <button id="btnRerun" type="button">Run again</button>
+    <div class="small" id="copyStatus" aria-live="polite"></div>
+    <label for="jsonOut">JSON result</label>
+    <textarea id="jsonOut" readonly spellcheck="false"></textarea>
+    <label for="shortOut">Short code (photograph or type this if copy fails)</label>
+    <pre id="shortOut" class="mono">—</pre>
+  </div>
+
+  <div class="panel">
+    <h2>What this page does not do</h2>
+    <ul>
+      <li>It requests no permissions and touches no vehicle system. It is a web page.</li>
+      <li>It does not ask for a DRM key system. EME is reported only as “present / absent”.</li>
+      <li>It does not play or download media, and it does not run a decode benchmark. Performance is <strong>not</strong> measured here.</li>
+      <li>It does not change the browser, the car, or any setting. Close the tab when finished.</li>
+    </ul>
+  </div>
+
+  <div class="footer" id="footer">
+    <span class="mono" id="pageVersion">phase9-1</span> · built for the Phase 8/9 Tesla browser research.
+    No analytics, cookies, fonts, images or third-party scripts.
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var PAGE_VERSION = "phase9-1";
+
+  var VIDEO_CODECS = [
+    ["h264_baseline", 'video/mp4; codecs="avc1.42E01E"', "avc1.42E01E"],
+    ["h264_high", 'video/mp4; codecs="avc1.64001F"', "avc1.64001F"],
+    ["hevc", 'video/mp4; codecs="hvc1.1.6.L93.B0"', "hvc1.1.6.L93.B0"],
+    ["vp8", 'video/webm; codecs="vp8"', "vp8"],
+    ["vp9", 'video/webm; codecs="vp09.00.10.08"', "vp09.00.10.08"],
+    ["av1", 'video/mp4; codecs="av01.0.05M.08"', "av01.0.05M.08"]
+  ];
+
+  var AUDIO_CODECS = [
+    ["aac", 'audio/mp4; codecs="mp4a.40.2"', "mp4a.40.2"],
+    ["opus", 'audio/webm; codecs="opus"', "opus"],
+    ["mp3", "audio/mpeg", "mp3"]
+  ];
+
+  var RESULT = null;
+  var softwareKeyEl = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function now() {
+    return (window.performance && performance.now) ? performance.now() : Date.now();
+  }
+
+  function safe(fn, fallback) {
+    try { return fn(); } catch (e) { return fallback; }
+  }
+
+  function safeAsync(promise, label) {
+    return promise.then(
+      function (v) { return v; },
+      function (e) { return "error:" + (e && e.name ? e.name : (label || "Error")); }
+    );
+  }
+
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise(function (resolve) {
+        setTimeout(function () { resolve("timeout:" + (label || "call")); }, ms);
+      })
+    ]);
+  }
+
+  function bytesToHex(u8) {
+    var out = "";
+    for (var i = 0; i < u8.length; i++) {
+      var h = u8[i].toString(16);
+      out += h.length === 1 ? "0" + h : h;
+    }
+    return out;
+  }
+
+  /**
+   * Parse a Chromium version out of a user agent.
+   * Tesla builds have appeared as both `Chromium/88.0.4324.150 Chrome/88.4324.150`
+   * and `Chrome/147.0.0.0`, so the first of those tokens is authoritative.
+   */
+  function parseUA(ua) {
+    var out = {
+      user_agent: ua || "",
+      engine: "unknown",
+      major: null,
+      full: null,
+      chromium_major: null,
+      chromium_full: null,
+      is_tesla_token: false,
+      notes: []
+    };
+    if (!ua || typeof ua !== "string") {
+      out.notes.push("empty user agent");
+      return out;
+    }
+    out.is_tesla_token = /Tesla\//i.test(ua);
+    var m = /(?:HeadlessChrome|Chromium|Chrome)\/(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?/.exec(ua);
+    if (m) {
+      out.engine = "chromium";
+      out.major = parseInt(m[1], 10);
+      out.full = m[1] + (m[2] ? "." + m[2] : "") + (m[3] ? "." + m[3] : "") + (m[4] ? "." + m[4] : "");
+    } else {
+      var ff = /Firefox\/(\d+)/.exec(ua);
+      if (ff) { out.engine = "firefox"; out.major = parseInt(ff[1], 10); }
+      var sf = /Version\/(\d+).*Safari/.exec(ua);
+      if (!ff && sf) { out.engine = "webkit"; out.major = parseInt(sf[1], 10); }
+    }
+    if (/Edg\//.test(ua)) out.notes.push("Edge token present");
+    if (/\bwv\b/.test(ua)) out.notes.push("WebView token present");
+    if (!out.is_tesla_token) {
+      out.notes.push("no Tesla/ token — newer Tesla builds may omit it; use the vehicle details above");
+    }
+    out.chromium_major = out.major;
+    out.chromium_full = out.full;
+    return out;
+  }
+
+  function probeCapabilities() {
+    var c = document.createElement("canvas");
+    var ctx2d = null;
+    try { ctx2d = c.getContext("2d"); } catch (e) { ctx2d = null; }
+
+    var off = typeof OffscreenCanvas !== "undefined";
+    var off2d = false;
+    if (off) {
+      try { off2d = !!(new OffscreenCanvas(8, 8)).getContext("2d"); } catch (e) { off2d = false; }
+    }
+
+    var wasmOk = false;
+    if (typeof WebAssembly !== "undefined" && WebAssembly.validate) {
+      wasmOk = safe(function () {
+        return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+      }, false);
+    }
+
+    var ac = window.AudioContext || window.webkitAudioContext;
+
+    return {
+      secure_context: window.isSecureContext === true,
+      cross_origin_isolated: window.crossOriginIsolated === true,
+      media_element: typeof HTMLMediaElement !== "undefined",
+      MediaSource: typeof MediaSource !== "undefined",
+      SourceBuffer: typeof SourceBuffer !== "undefined",
+      ManagedMediaSource: typeof ManagedMediaSource !== "undefined",
+      RTCPeerConnection: typeof RTCPeerConnection !== "undefined",
+      RTCDataChannel: typeof RTCDataChannel !== "undefined",
+      MediaStreamTrackProcessor: typeof MediaStreamTrackProcessor !== "undefined",
+      MediaStreamTrackGenerator: typeof MediaStreamTrackGenerator !== "undefined",
+      VideoDecoder: typeof VideoDecoder !== "undefined",
+      AudioDecoder: typeof AudioDecoder !== "undefined",
+      VideoEncoder: typeof VideoEncoder !== "undefined",
+      VideoFrame: typeof VideoFrame !== "undefined",
+      EncodedVideoChunk: typeof EncodedVideoChunk !== "undefined",
+      ImageDecoder: typeof ImageDecoder !== "undefined",
+      OffscreenCanvas: off,
+      offscreen_2d: off2d,
+      transferControlToOffscreen:
+        typeof HTMLCanvasElement !== "undefined" &&
+        "transferControlToOffscreen" in HTMLCanvasElement.prototype,
+      canvas_2d: !!ctx2d,
+      requestVideoFrameCallback:
+        typeof HTMLVideoElement !== "undefined" &&
+        typeof HTMLVideoElement.prototype.requestVideoFrameCallback === "function",
+      captureStream:
+        typeof HTMLCanvasElement !== "undefined" &&
+        typeof HTMLCanvasElement.prototype.captureStream === "function",
+      WebAssembly: typeof WebAssembly !== "undefined",
+      wasm_validate_empty_module: wasmOk,
+      SharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
+      AudioContext: typeof ac !== "undefined",
+      MediaCapabilities:
+        !!navigator.mediaCapabilities &&
+        typeof navigator.mediaCapabilities.decodingInfo === "function",
+      WebGL2: typeof WebGL2RenderingContext !== "undefined",
+      WebGPU: !!navigator.gpu,
+      // Presence only. No key system is requested: that would be DRM probing.
+      EME_present: typeof navigator.requestMediaKeySystemAccess === "function",
+      PictureInPicture: !!document.pictureInPictureEnabled
+    };
+  }
+
+  function probeCodecs() {
+    var v = document.createElement("video");
+    var a = document.createElement("audio");
+
+    function canPlay(el, type) {
+      try {
+        var r = el.canPlayType(type);
+        if (r === "probably" || r === "maybe") return r;
+        return "no";
+      } catch (e) { return "error"; }
+    }
+
+    function mse(type) {
+      try {
+        if (typeof MediaSource === "undefined") return "unavailable";
+        return MediaSource.isTypeSupported(type) === true;
+      } catch (e) { return "error"; }
+    }
+
+    var out = {};
+    var i;
+    for (i = 0; i < VIDEO_CODECS.length; i++) {
+      var vc = VIDEO_CODECS[i];
+      out[vc[0]] = {
+        type: vc[1],
+        codec: vc[2],
+        kind: "video",
+        can_play: canPlay(v, vc[1]),
+        mse: mse(vc[1])
+      };
+    }
+    for (i = 0; i < AUDIO_CODECS.length; i++) {
+      var ac = AUDIO_CODECS[i];
+      out[ac[0]] = {
+        type: ac[1],
+        codec: ac[2],
+        kind: "audio",
+        can_play: canPlay(a, ac[1]),
+        mse: mse(ac[1])
+      };
+    }
+    return out;
+  }
+
+  function probeWebCodecs() {
+    if (typeof VideoDecoder === "undefined") {
+      return Promise.resolve({ available: false });
+    }
+    var configs = {};
+    var hardware = {};
+    var chain = Promise.resolve();
+
+    VIDEO_CODECS.forEach(function (vc) {
+      chain = chain.then(function () {
+        var config = { codec: vc[2], codedWidth: 1280, codedHeight: 720 };
+        return safeAsync(VideoDecoder.isConfigSupported(config), "isConfigSupported")
+          .then(function (r) {
+            configs[vc[0]] = (r && typeof r === "object" && typeof r.supported === "boolean")
+              ? r.supported
+              : (typeof r === "string" ? r : "error:unexpected");
+          });
+      });
+    });
+
+    ["no-preference", "prefer-hardware", "prefer-software"].forEach(function (pref) {
+      chain = chain.then(function () {
+        return safeAsync(
+          VideoDecoder.isConfigSupported({
+            codec: "avc1.64001F",
+            codedWidth: 1280,
+            codedHeight: 720,
+            hardwareAcceleration: pref
+          }),
+          "isConfigSupported"
+        ).then(function (r) {
+          hardware[pref] = (r && typeof r === "object" && typeof r.supported === "boolean")
+            ? r.supported
+            : (typeof r === "string" ? r : "error:unexpected");
+        });
+      });
+    });
+
+    return chain.then(function () {
+      return { available: true, configs: configs, hardware: hardware };
+    });
+  }
+
+  function probeRtc() {
+    if (typeof RTCPeerConnection === "undefined") return { available: false };
+    var codecs = null;
+    try {
+      if (typeof RTCRtpReceiver !== "undefined" && RTCRtpReceiver.getCapabilities) {
+        var caps = RTCRtpReceiver.getCapabilities("video");
+        if (caps && caps.codecs) {
+          codecs = [];
+          for (var i = 0; i < caps.codecs.length; i++) codecs.push(caps.codecs[i].mimeType);
+        }
+      }
+    } catch (e) { codecs = "error:" + (e && e.name ? e.name : "Error"); }
+    return { available: true, receive_codecs: codecs };
+  }
+
+  function probeWorker() {
+    return new Promise(function (resolve) {
+      var src =
+        "self.onmessage=function(){" +
+        "var r={worker_ok:true," +
+        "VideoDecoder:typeof VideoDecoder!=='undefined'," +
+        "AudioDecoder:typeof AudioDecoder!=='undefined'," +
+        "OffscreenCanvas:typeof OffscreenCanvas!=='undefined'," +
+        "offscreen_2d:false," +
+        "WebAssembly:typeof WebAssembly!=='undefined'," +
+        "crossOriginIsolated:self.crossOriginIsolated===true};" +
+        "try{r.offscreen_2d=!!(new OffscreenCanvas(8,8)).getContext('2d');}catch(e){}" +
+        "self.postMessage(r);};";
+
+      var url = null;
+      var w = null;
+      var done = false;
+      var timer = null;
+
+      function finish(value) {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        try { if (w) w.terminate(); } catch (e) { /* ignore */ }
+        try { if (url) URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+        resolve(value);
+      }
+
+      try {
+        url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+        w = new Worker(url);
+      } catch (e) {
+        resolve({ worker_ok: false, error: String((e && e.message) || e) });
+        return;
+      }
+
+      timer = setTimeout(function () {
+        finish({ worker_ok: false, error: "timeout" });
+      }, 3000);
+
+      w.onmessage = function (ev) {
+        finish(ev.data && typeof ev.data === "object" ? ev.data : { worker_ok: false, error: "bad message" });
+      };
+      w.onerror = function (ev) {
+        finish({ worker_ok: false, error: String((ev && ev.message) || "worker error") });
+      };
+      w.postMessage("go");
+    });
+  }
+
+  function measureTimer() {
+    var min = Infinity;
+    var prev = now();
+    for (var i = 0; i < 5000; i++) {
+      var t = now();
+      var d = t - prev;
+      if (d > 0 && d < min) min = d;
+      prev = t;
+    }
+    return isFinite(min) ? Math.round(min * 1000) / 1000 : null;
+  }
+
+  function measureRaf(durationMs) {
+    return new Promise(function (resolve) {
+      var stamps = [];
+      var start = now();
+      function tick(t) {
+        stamps.push(typeof t === "number" ? t : now());
+        if (now() - start < durationMs) {
+          requestAnimationFrame(tick);
+        } else {
+          var span = stamps.length > 1 ? stamps[stamps.length - 1] - stamps[0] : 0;
+          var gaps = [];
+          for (var i = 1; i < stamps.length; i++) gaps.push(stamps[i] - stamps[i - 1]);
+          var maxGap = 0;
+          for (var j = 0; j < gaps.length; j++) if (gaps[j] > maxGap) maxGap = gaps[j];
+          resolve({
+            frames: stamps.length,
+            span_ms: Math.round(span * 10) / 10,
+            fps: span > 0 ? Math.round(((stamps.length - 1) / span) * 1000 * 10) / 10 : 0,
+            max_gap_ms: Math.round(maxGap * 10) / 10
+          });
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function resourceInfo() {
+    var entries = [];
+    try {
+      if (performance.getEntriesByType) entries = performance.getEntriesByType("resource") || [];
+    } catch (e) { entries = []; }
+    var origins = {};
+    var names = [];
+    for (var i = 0; i < entries.length; i++) {
+      var name = entries[i].name;
+      names.push(name);
+      try {
+        var o = new URL(name).origin;
+        origins[o] = (origins[o] || 0) + 1;
+      } catch (e) { /* ignore */ }
+    }
+    return {
+      resource_count: entries.length,
+      origins: Object.keys(origins),
+      names: names.slice(0, 20)
+    };
+  }
+
+  function probeUserAgentData() {
+    var d = navigator.userAgentData;
+    var out = {
+      available: !!d,
+      brands: d && d.brands ? d.brands : null,
+      mobile: d && typeof d.mobile === "boolean" ? d.mobile : null,
+      platform: d && d.platform ? d.platform : null,
+      high_entropy: null
+    };
+    if (!d || typeof d.getHighEntropyValues !== "function") return Promise.resolve(out);
+
+    return withTimeout(
+      safeAsync(d.getHighEntropyValues(["fullVersionList", "platformVersion"]), "ua-ch"),
+      2500,
+      "ua-ch"
+    ).then(function (v) {
+      if (v && typeof v === "object" && !(typeof v === "string")) {
+        out.high_entropy = {
+          full_version_list: v.fullVersionList || null,
+          platform_version: v.platformVersion || null
+        };
+      } else {
+        out.high_entropy = v;
+      }
+      return out;
+    });
+  }
+
+  function buildVerdict(r) {
+    var caps = r.capabilities;
+    var major = r.browser.chromium_major;
+    var wc = !!(caps.VideoDecoder && caps.VideoFrame && caps.EncodedVideoChunk);
+    var warnings = [];
+    var contradiction = null;
+
+    if (!r.environment.secure_context) {
+      warnings.push("Not a secure context. WebCodecs requires HTTPS; reopen the page over HTTPS.");
+    }
+    if (caps.MediaSource !== true) {
+      warnings.push("Media Source Extensions are absent. That is unusual for a Chromium browser.");
+    }
+    if (!r.worker.worker_ok) {
+      warnings.push("Blob workers are blocked. Worker-based pipelines may fail on this build.");
+    }
+    if (!wc) {
+      var h = r.codecs.h264 || {};
+      if (h.can_play === "no" && h.mse !== true) {
+        warnings.push("H.264 is not available. The audited commercial services cannot work.");
+      }
+    }
+    if (r.network && r.network.resource_count > 0) {
+      warnings.push("The page loaded " + r.network.resource_count + " subresource(s); expected zero.");
+    }
+    if (major !== null && major !== undefined) {
+      if (major < 94 && wc) {
+        contradiction = "UA reports Chromium " + major + ", but WebCodecs is present. Trust the feature detection and record the contradiction.";
+      }
+      if (major >= 94 && !wc) {
+        contradiction = "UA reports Chromium " + major + ", but WebCodecs is absent. This build may omit it.";
+      }
+    }
+
+    return {
+      webcodecs_available: wc,
+      chromium_gate: wc ? "at-or-above-94" : "below-94",
+      family: wc ? "B or C available at the API level" : "A only",
+      contradiction: contradiction,
+      warnings: warnings,
+      performance_measured: false,
+      performance_note: "This page does not measure decode throughput. Phase 8's desktop numbers are not vehicle results.",
+      summary:
+        "WebCodecs " + (wc ? "present" : "absent") +
+        " · Chromium " + (major === null || major === undefined ? "unknown" : major) +
+        " · " + (wc ? "Family B/C reachable" : "Family A only") +
+        " · performance not measured"
+    };
+  }
+
+  function collectInputs() {
+    return {
+      model_and_year: $("inModel") ? $("inModel").value : "",
+      software_version: $("inSw") ? $("inSw").value : "",
+      notes: $("inNotes") ? $("inNotes").value : ""
+    };
+  }
+
+  function buildResult(parts) {
+    var r = {
+      schema: "tesla-vehicle-diagnostic/v1",
+      page_version: PAGE_VERSION,
+      collected_at: new Date().toISOString(),
+      inputs: collectInputs(),
+      browser: parts.browser,
+      display: parts.display,
+      capabilities: parts.capabilities,
+      codecs: parts.codecs,
+      webcodecs: parts.webcodecs,
+      rtc: parts.rtc,
+      worker: parts.worker,
+      environment: parts.environment,
+      network: parts.network,
+      privacy: {
+        external_requests: parts.network.resource_count,
+        permissions_requested: [],
+        cookies_set_by_page: false,
+        analytics: false
+      }
+    };
+    r.verdict = buildVerdict(r);
+    return r;
+  }
+
+  function run() {
+    var started = now();
+    var browser = parseUA(navigator.userAgent);
+    var display = {
+      screen_width: window.screen ? screen.width : null,
+      screen_height: window.screen ? screen.height : null,
+      avail_width: window.screen ? screen.availWidth : null,
+      avail_height: window.screen ? screen.availHeight : null,
+      inner_width: window.innerWidth,
+      inner_height: window.innerHeight,
+      device_pixel_ratio: window.devicePixelRatio || 1,
+      orientation: safe(function () {
+        return screen.orientation ? screen.orientation.type : null;
+      }, null)
+    };
+
+    var capabilities = probeCapabilities();
+    var codecs = probeCodecs();
+    var rtc = probeRtc();
+
+    return Promise.all([
+      probeWorker(),
+      probeWebCodecs(),
+      probeUserAgentData(),
+      measureRaf(320)
+    ]).then(function (all) {
+      var worker = all[0];
+      var wc = all[1];
+      var uaData = all[2];
+      var raf = all[3];
+
+      browser.user_agent_data = uaData;
+      if (uaData && uaData.high_entropy && uaData.high_entropy.full_version_list) {
+        var list = uaData.high_entropy.full_version_list;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].brand === "Chromium" && (!browser.full || browser.major === null)) {
+            browser.full = list[i].version;
+            browser.major = parseInt(String(list[i].version).split(".")[0], 10);
+            browser.chromium_full = browser.full;
+            browser.chromium_major = browser.major;
+            browser.notes.push("version taken from UA-CH fullVersionList");
+          }
+        }
+      }
+
+      var environment = {
+        secure_context: capabilities.secure_context,
+        cross_origin_isolated: capabilities.cross_origin_isolated,
+        hardware_concurrency: navigator.hardwareConcurrency || null,
+        device_memory_gb: typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : null,
+        language: navigator.language || null,
+        timer_resolution_ms: measureTimer(),
+        raf: raf,
+        probe_wall_ms: Math.round((now() - started) * 10) / 10
+      };
+
+      var result = buildResult({
+        browser: browser,
+        display: display,
+        capabilities: capabilities,
+        codecs: codecs,
+        webcodecs: wc,
+        rtc: rtc,
+        worker: worker,
+        environment: environment,
+        network: resourceInfo()
+      });
+
+      RESULT = result;
+      window.__vehicleResult = result;
+      render(result);
+      return result;
+    });
+  }
+
+  function statusOf(v) {
+    if (v === true) return "ok";
+    if (v === false) return "no";
+    return "warn";
+  }
+
+  function chip(status, text) {
+    var s = document.createElement("span");
+    s.className = "chip " + status;
+    s.textContent = text;
+    return s;
+  }
+
+  function formatBrands(brands) {
+    if (!brands || !brands.length) return "—";
+    var out = [];
+    for (var i = 0; i < brands.length; i++) {
+      out.push((brands[i].brand || "?") + " " + (brands[i].version || "?"));
+    }
+    return out.join(" · ");
+  }
+
+  function yn(v) {
+    return v === true ? "Y" : v === false ? "N" : "?";
+  }
+
+  function yesNo(v) {
+    return v === true ? "yes" : v === false ? "no" : "unknown";
+  }
+
+  function yesNoStatus(v) {
+    return v === true ? "ok" : v === false ? "no" : "warn";
+  }
+
+  /**
+   * A compact summary designed to be photographed in the car. The full tables
+   * below it are the detail; this is the part that must survive a blurry photo.
+   */
+  function renderKeys(r) {
+    var g = $("keyGrid");
+    while (g.firstChild) g.removeChild(g.firstChild);
+
+    function item(label, value, status) {
+      var d = document.createElement("div");
+      d.className = "keyitem";
+      var b = document.createElement("b");
+      b.textContent = label;
+      var s = document.createElement("span");
+      s.textContent = value;
+      if (status) s.className = status;
+      d.appendChild(b);
+      d.appendChild(s);
+      g.appendChild(d);
+      return s;
+    }
+
+    var c = r.capabilities;
+    item("Chromium", r.browser.chromium_major === null ? "undetectable" : String(r.browser.chromium_major),
+      r.browser.chromium_major === null ? "warn" : "ok");
+    item("WebCodecs", yesNo(c.VideoDecoder), yesNoStatus(c.VideoDecoder));
+    item("MSTP", yesNo(c.MediaStreamTrackProcessor), yesNoStatus(c.MediaStreamTrackProcessor));
+    item("MSE", yesNo(c.MediaSource), yesNoStatus(c.MediaSource));
+    item("WebRTC", yesNo(c.RTCPeerConnection), yesNoStatus(c.RTCPeerConnection));
+    item("Canvas 2D", yesNo(c.canvas_2d), yesNoStatus(c.canvas_2d));
+    item("OffscreenCanvas", yesNo(c.OffscreenCanvas), yesNoStatus(c.OffscreenCanvas));
+    item("WebAssembly", yesNo(c.WebAssembly), yesNoStatus(c.WebAssembly));
+
+    var h264wc = r.webcodecs.available && r.webcodecs.configs
+      ? r.webcodecs.configs.h264_high
+      : null;
+    item("H.264 via WebCodecs",
+      h264wc === true ? "yes" : h264wc === false ? "no" : "—",
+      h264wc === true ? "ok" : h264wc === false ? "no" : "warn");
+
+    item("Screen", r.display.screen_width + " × " + r.display.screen_height, "ok");
+    softwareKeyEl = item("Software", r.inputs.software_version || "not entered",
+      r.inputs.software_version ? "ok" : "warn");
+    item("Subresources", String(r.network.resource_count),
+      r.network.resource_count === 0 ? "ok" : "warn");
+  }
+
+  function cellText(text) {
+    var td = document.createElement("td");
+    td.className = "v mono";
+    td.textContent = text;
+    return td;
+  }
+
+  function addRow(table, key, valueNode, note) {
+    var tr = document.createElement("tr");
+    var td = document.createElement("td");
+    td.className = "k";
+    td.textContent = key;
+    tr.appendChild(td);
+    var td2 = document.createElement("td");
+    td2.className = "v";
+    if (typeof valueNode === "string") td2.textContent = valueNode;
+    else td2.appendChild(valueNode);
+    tr.appendChild(td2);
+    if (note) {
+      var td3 = document.createElement("td");
+      td3.className = "small";
+      td3.textContent = note;
+      tr.appendChild(td3);
+    }
+    table.appendChild(tr);
+    return tr;
+  }
+
+  function renderVerdict(r) {
+    $("verdictLine").textContent = r.verdict.webcodecs_available
+      ? "WebCodecs is present in this browser"
+      : "WebCodecs is not present in this browser";
+    $("verdictSub").textContent = r.verdict.summary;
+
+    var extra = $("verdictExtra");
+    while (extra.firstChild) extra.removeChild(extra.firstChild);
+
+    var line = document.createElement("div");
+    line.style.marginTop = "10px";
+    line.appendChild(chip("gate", r.verdict.chromium_gate));
+    line.appendChild(document.createTextNode(" "));
+    line.appendChild(chip(r.verdict.webcodecs_available ? "ok" : "warn", r.verdict.family));
+    line.appendChild(document.createTextNode(" "));
+    line.appendChild(chip("info", "performance not measured"));
+    extra.appendChild(line);
+
+    if (r.verdict.contradiction) {
+      var c = document.createElement("div");
+      c.className = "callout bad";
+      c.textContent = r.verdict.contradiction;
+      extra.appendChild(c);
+    }
+    for (var i = 0; i < r.verdict.warnings.length; i++) {
+      var w = document.createElement("div");
+      w.className = "callout";
+      w.textContent = r.verdict.warnings[i];
+      extra.appendChild(w);
+    }
+  }
+
+  function renderBrowser(r) {
+    var tbody = $("browserTable").getElementsByTagName("tbody")[0];
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+    addRow(tbody, "User agent", r.browser.user_agent || "—");
+    addRow(tbody, "Chromium major", String(r.browser.chromium_major === null ? "undetectable" : r.browser.chromium_major),
+      r.browser.full || "");
+    addRow(tbody, "Engine family", r.browser.engine);
+    addRow(tbody, "Tesla/ token in UA", r.browser.is_tesla_token ? "yes" : "no");
+    if (r.browser.user_agent_data && r.browser.user_agent_data.available) {
+      addRow(tbody, "UA-CH brands", formatBrands(r.browser.user_agent_data.brands));
+      addRow(tbody, "UA-CH platform", String(r.browser.user_agent_data.platform));
+    } else {
+      addRow(tbody, "UA-CH", "not exposed");
+    }
+    addRow(tbody, "Display", r.display.screen_width + " × " + r.display.screen_height +
+      " (avail " + r.display.avail_width + " × " + r.display.avail_height + ")");
+    addRow(tbody, "Viewport", r.display.inner_width + " × " + r.display.inner_height +
+      " · DPR " + r.display.device_pixel_ratio);
+    addRow(tbody, "Secure context", r.environment.secure_context ? "yes (HTTPS)" : "NO — not HTTPS",
+      null, "");
+    addRow(tbody, "Hardware concurrency", r.environment.hardware_concurrency === null ? "—" : String(r.environment.hardware_concurrency));
+    addRow(tbody, "Device memory (hint)", r.environment.device_memory_gb === null ? "—" : (r.environment.device_memory_gb + " GB"));
+    addRow(tbody, "Timer resolution", r.environment.timer_resolution_ms === null ? "—" : (r.environment.timer_resolution_ms + " ms"));
+    addRow(tbody, "rAF", r.environment.raf.frames + " frames · " + r.environment.raf.fps + " fps · max gap " + r.environment.raf.max_gap_ms + " ms");
+    addRow(tbody, "Subresources loaded", String(r.network.resource_count) + " (expected 0)");
+  }
+
+  function renderCaps(r) {
+    var tbody = $("capsTable").getElementsByTagName("tbody")[0];
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+    var c = r.capabilities;
+    var rows = [
+      ["MediaSource (MSE)", c.MediaSource],
+      ["SourceBuffer", c.SourceBuffer],
+      ["RTCPeerConnection (WebRTC)", c.RTCPeerConnection],
+      ["RTCDataChannel", c.RTCDataChannel],
+      ["MediaStreamTrackProcessor", c.MediaStreamTrackProcessor],
+      ["MediaStreamTrackGenerator", c.MediaStreamTrackGenerator],
+      ["VideoDecoder (WebCodecs)", c.VideoDecoder],
+      ["AudioDecoder", c.AudioDecoder],
+      ["VideoEncoder", c.VideoEncoder],
+      ["VideoFrame", c.VideoFrame],
+      ["EncodedVideoChunk", c.EncodedVideoChunk],
+      ["Canvas 2D context", c.canvas_2d],
+      ["OffscreenCanvas", c.OffscreenCanvas],
+      ["OffscreenCanvas 2D", c.offscreen_2d],
+      ["transferControlToOffscreen", c.transferControlToOffscreen],
+      ["requestVideoFrameCallback", c.requestVideoFrameCallback],
+      ["canvas.captureStream", c.captureStream],
+      ["WebAssembly", c.WebAssembly],
+      ["WASM empty-module validate", c.wasm_validate_empty_module],
+      ["SharedArrayBuffer", c.SharedArrayBuffer],
+      ["MediaCapabilities", c.MediaCapabilities],
+      ["WebGL2", c.WebGL2],
+      ["WebGPU", c.WebGPU],
+      ["EME API (presence only)", c.EME_present]
+    ];
+
+    for (var i = 0; i < rows.length; i++) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td");
+      td1.className = "k";
+      td1.textContent = rows[i][0];
+      var td2 = document.createElement("td");
+      td2.className = "v";
+      var v = rows[i][1];
+      td2.appendChild(chip(statusOf(v), v === true ? "yes" : v === false ? "no" : String(v)));
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
+    }
+
+    var w = r.worker;
+    var trw = document.createElement("tr");
+    var tdw = document.createElement("td");
+    tdw.className = "k";
+    tdw.textContent = "Worker scope";
+    var tdw2 = document.createElement("td");
+    tdw2.className = "v small";
+    tdw2.textContent = w.worker_ok
+      ? ("ok · VideoDecoder " + (w.VideoDecoder ? "yes" : "no") +
+         " · OffscreenCanvas 2D " + (w.offscreen_2d ? "yes" : "no") +
+         " · WASM " + (w.WebAssembly ? "yes" : "no"))
+      : ("unavailable: " + (w.error || "unknown"));
+    trw.appendChild(tdw);
+    trw.appendChild(tdw2);
+    tbody.appendChild(trw);
+  }
+
+  function fmtTri(v) {
+    if (v === true) return "yes";
+    if (v === false) return "no";
+    if (v === "no") return "no";
+    if (v === "maybe") return "maybe";
+    if (v === "probably") return "probably";
+    if (v === "unavailable") return "—";
+    if (typeof v === "string") return v;
+    return "—";
+  }
+
+  function renderCodecs(r) {
+    var tbody = $("codecsTable").getElementsByTagName("tbody")[0];
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+    var list = VIDEO_CODECS.concat(AUDIO_CODECS);
+    for (var i = 0; i < list.length; i++) {
+      var name = list[i][0];
+      var row = r.codecs[name];
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td");
+      td1.textContent = name;
+      tr.appendChild(td1);
+      [row.can_play, row.mse].forEach(function (v) {
+        var td = document.createElement("td");
+        td.className = "mono";
+        td.textContent = fmtTri(v);
+        tr.appendChild(td);
+      });
+      var tdWc = document.createElement("td");
+      tdWc.className = "mono";
+      if (row.kind === "audio" || !r.webcodecs.available) {
+        tdWc.textContent = "—";
+      } else {
+        tdWc.textContent = fmtTri(r.webcodecs.configs[name]);
+      }
+      tr.appendChild(tdWc);
+      var tdHw = document.createElement("td");
+      tdHw.className = "mono";
+      if (name !== "h264_high" || !r.webcodecs.available) {
+        tdHw.textContent = "—";
+      } else {
+        tdHw.textContent = "np " + yn(r.webcodecs.hardware["no-preference"]) +
+          " · hw " + yn(r.webcodecs.hardware["prefer-hardware"]) +
+          " · sw " + yn(r.webcodecs.hardware["prefer-software"]);
+      }
+      tr.appendChild(tdHw);
+      tbody.appendChild(tr);
+    }
+
+    if (r.rtc.available && r.rtc.receive_codecs && r.rtc.receive_codecs.length) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td");
+      td1.textContent = "WebRTC receive";
+      tr.appendChild(td1);
+      var td2 = document.createElement("td");
+      td2.colSpan = 4;
+      td2.className = "mono small";
+      td2.textContent = r.rtc.receive_codecs.join(", ");
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
+    }
+  }
+
+  function buildShort(r) {
+    function b(v) { return v ? "1" : "0"; }
+    var c = r.capabilities;
+    var h = r.codecs.h264 || {};
+    var hevc = r.codecs.hevc || {};
+    var av1 = r.codecs.av1 || {};
+    var parts = ["T9v1"];
+    parts.push("ua=" + (r.browser.chromium_major === null ? "?" : r.browser.chromium_major));
+    parts.push("wc=" + b(r.webcodecs.available));
+    parts.push("mstp=" + b(c.MediaStreamTrackProcessor));
+    parts.push("mse=" + b(c.MediaSource));
+    parts.push("rtc=" + b(c.RTCPeerConnection));
+    parts.push("c2d=" + b(c.canvas_2d));
+    parts.push("oc=" + b(c.OffscreenCanvas));
+    parts.push("oc2d=" + b(c.offscreen_2d));
+    parts.push("wasm=" + b(c.WebAssembly));
+    parts.push("h264p=" + (h.can_play === "no" ? "0" : "1"));
+    parts.push("h264d=" + b(r.webcodecs.available && r.webcodecs.configs && r.webcodecs.configs.h264_high));
+    parts.push("hevc=" + b(hevc.can_play !== "no" || hevc.mse === true));
+    parts.push("av1=" + b(av1.can_play !== "no" || av1.mse === true));
+    parts.push("scr=" + r.display.screen_width + "x" + r.display.screen_height);
+    parts.push("dpr=" + r.display.device_pixel_ratio);
+    if (r.inputs.software_version) {
+      parts.push("sw=" + String(r.inputs.software_version).replace(/[^0-9A-Za-z._-]/g, ""));
+    }
+    return parts.join("|");
+  }
+
+  function jsonText() {
+    if (!RESULT) return "";
+    RESULT.inputs = collectInputs();
+    RESULT.verdict = buildVerdict(RESULT);
+    return JSON.stringify(RESULT, null, 2);
+  }
+
+  function renderExport(r) {
+    $("jsonOut").value = jsonText();
+    $("shortOut").textContent = buildShort(r);
+  }
+
+  function render(r) {
+    renderVerdict(r);
+    renderKeys(r);
+    renderBrowser(r);
+    renderCaps(r);
+    renderCodecs(r);
+    renderExport(r);
+  }
+
+  function setStatus(text) {
+    $("copyStatus").textContent = text;
+  }
+
+  function copyJson() {
+    var text = jsonText();
+    function fallback() {
+      try {
+        var ta = $("jsonOut");
+        ta.focus();
+        ta.select();
+        var ok = document.execCommand("copy");
+        setStatus(ok ? "Copied (fallback)." : "Copy blocked. Use Select all, then copy manually.");
+      } catch (e) {
+        setStatus("Copy blocked. Use Select all, then copy manually.");
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        setStatus("Copied " + text.length + " characters to the clipboard.");
+      }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function downloadJson() {
+    var text = jsonText();
+    try {
+      var blob = new Blob([text], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "tesla-browser-diagnostic-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        try { document.body.removeChild(a); } catch (e) { /* ignore */ }
+        URL.revokeObjectURL(url);
+      }, 1500);
+      setStatus("Download started (if the browser allows downloads).");
+    } catch (e) {
+      setStatus("Download blocked: " + ((e && e.message) || e) + ". Use Copy JSON or the short code.");
+    }
+  }
+
+  function selectAll() {
+    var ta = $("jsonOut");
+    ta.focus();
+    ta.select();
+    if (ta.setSelectionRange) ta.setSelectionRange(0, ta.value.length);
+    setStatus("Selected. Use the browser's copy command.");
+  }
+
+  function wire() {
+    $("btnCopy").onclick = copyJson;
+    $("btnDownload").onclick = downloadJson;
+    $("btnSelect").onclick = selectAll;
+    $("btnRerun").onclick = function () {
+      $("verdictLine").textContent = "Running capability checks…";
+      $("verdictSub").textContent = "This takes a second. Nothing is uploaded.";
+      run().catch(renderError);
+    };
+    var inputs = ["inModel", "inSw", "inNotes"];
+    for (var i = 0; i < inputs.length; i++) {
+      var el = $(inputs[i]);
+      if (el) el.oninput = function () {
+        if (!RESULT) return;
+        if (softwareKeyEl) {
+          var sw = $("inSw").value;
+          softwareKeyEl.textContent = sw || "not entered";
+          softwareKeyEl.className = sw ? "ok" : "warn";
+        }
+        renderExport(RESULT);
+      };
+    }
+  }
+
+  function renderError(err) {
+    var msg = (err && err.message) ? err.message : String(err);
+    $("verdictLine").textContent = "The diagnostic could not complete";
+    $("verdictSub").textContent = msg;
+    var extra = $("verdictExtra");
+    var c = document.createElement("div");
+    c.className = "callout bad";
+    c.textContent = "Send the JSON / short code anyway if it is shown below; the failure itself is a result.";
+    extra.appendChild(c);
+    window.__vehicleError = msg;
+  }
+
+  window.__vehicle = {
+    run: run,
+    getResult: function () { return RESULT; },
+    buildJson: jsonText,
+    shortCode: function () { return RESULT ? buildShort(RESULT) : ""; },
+    parseUA: parseUA,
+    buildVerdict: buildVerdict
+  };
+
+  wire();
+  run().then(function () {
+    window.__vehicleReady = true;
+  }).catch(function (e) {
+    window.__vehicleReady = true;
+    renderError(e);
+  });
+})();
+</script>
+</body>
+</html>
